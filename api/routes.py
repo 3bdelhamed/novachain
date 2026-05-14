@@ -1,3 +1,5 @@
+import os
+
 from pydantic import BaseModel
 import asyncio
 import time
@@ -206,44 +208,103 @@ async def get_blocks_batch(offset: int = 0, limit: int = 50):
     blocks = bc.storage.get_blocks_batch(offset, limit)
     return {"blocks": [b.to_dict() for b in blocks]}
 
+@router.get("/network/status")
+async def network_status():
+    """Real network health diagnostic."""
+    bc = get_blockchain()
+    is_valid = bc.is_chain_valid()
+    peers = list(bc.nodes)
+    
+    # Check peer chain lengths
+    peer_info = []
+    async with httpx.AsyncClient(timeout=3.0) as client:
+        for node in peers:
+            try:
+                resp = await client.get(f"{node}/chain/valid")
+                data = resp.json()
+                peer_info.append({
+                    "url": node,
+                    "valid": data.get("valid"),
+                    "length": data.get("length"),
+                })
+            except Exception:
+                peer_info.append({"url": node, "valid": None, "length": None, "error": "unreachable"})
 
+    # Find authoritative peer (longest valid)
+    authoritative = None
+    max_valid_len = len(bc.chain) if is_valid else 0
+    for p in peer_info:
+        if p.get("valid") and p.get("length", 0) > max_valid_len:
+            max_valid_len = p["length"]
+            authoritative = p["url"]
+
+    return {
+        "local_valid": is_valid,
+        "chain_length": len(bc.chain),
+        "peers": peer_info,
+        "synchronized": is_valid and all(p.get("valid") for p in peer_info if p.get("valid") is not None),
+        "authoritative_peer": authoritative,
+        "needs_healing": not is_valid or (authoritative is not None and authoritative != f"http://127.0.0.1:{os.environ.get('PORT', '8000')}"),
+    }
+    
 @router.get("/nodes/resolve")
 async def resolve_conflicts():
     import httpx
     from core.block import Block
     from core.instance import get_blockchain
     from network.websocket import ws_manager
+    import os
     
     bc = get_blockchain()
     current_length = bc.storage.get_chain_length()
-    
-    # 1. NEW: Check if our own local chain is corrupted
     is_local_valid = bc.is_chain_valid()
 
-    best_peer = None
-    
-    # 2. FIX: If our chain is invalid, we will accept ANY valid remote chain 
-    # that is longer than the genesis block, ignoring our own corrupted length.
+    # If local chain is corrupted, we accept ANY valid chain longer than genesis
     max_length = current_length if is_local_valid else 1
+    best_peer = None
+    best_chain_valid = False
 
-    # Ask peers for their chain length
+    # Phase 1: Discover best valid peer chain
     for node in bc.nodes:
+        if node == f"http://127.0.0.1:{os.environ.get('PORT', '8000')}":
+            continue
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 resp = await client.get(f"{node}/chain/valid")
                 data = resp.json()
-                if data.get("valid") and data.get("length") > max_length:
-                    max_length = data["length"]
+                peer_valid = data.get("valid", False)
+                peer_len = data.get("length", 0)
+                
+                # STRICT: only consider VALID chains
+                if peer_valid and peer_len > max_length:
+                    max_length = peer_len
                     best_peer = node
+                    best_chain_valid = True
         except Exception:
             pass
-    # 2. Safely fetch and validate before wiping local data
+
+    # Phase 2: If local is invalid and no valid peer found, try any longer chain
+    if not is_local_valid and best_peer is None:
+        for node in bc.nodes:
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    resp = await client.get(f"{node}/chain/valid")
+                    data = resp.json()
+                    peer_len = data.get("length", 0)
+                    if peer_len > 1:  # longer than genesis
+                        max_length = peer_len
+                        best_peer = node
+                        best_chain_valid = data.get("valid", False)
+                        break
+            except Exception:
+                pass
+
+    # Phase 3: Fetch and validate before replacing
     if best_peer:
         new_chain_dicts = []
         offset = 0
         batch_size = 50
 
-        # Fetch the longer chain from the peer
         async with httpx.AsyncClient(timeout=10.0) as client:
             while offset < max_length:
                 resp = await client.get(f"{best_peer}/blocks?offset={offset}&limit={batch_size}")
@@ -253,22 +314,44 @@ async def resolve_conflicts():
                 new_chain_dicts.extend(batch_data)
                 offset += batch_size
 
-        # Convert dictionaries back to Block objects
         new_chain = [Block.from_dict(b) for b in new_chain_dicts]
 
-        # Use replace_chain to validate against local difficulty BEFORE touching SQLite
+        # CRITICAL: Validate the incoming chain BEFORE touching our database
+        if not bc.consensus.validate_chain(new_chain):
+            return {"message": "Sync rejected: Remote chain failed validation", "valid": False}
+
+        # Replace safely
         if bc.replace_chain(new_chain):
             recent_blocks = bc.storage.get_blocks_batch(max(0, max_length - 100), 100)
             await ws_manager.broadcast({
                 "type": "chain_replaced",
-                "chain": [b.to_dict() for b in recent_blocks]
+                "chain": [b.to_dict() for b in recent_blocks],
+                "valid": True,
+                "source": "network_healing",
             })
-            return {"message": f"Chain synchronized safely. Total length: {max_length}"}
+            return {
+                "message": f"Chain synchronized. Length: {max_length}",
+                "valid": True,
+                "source_peer": best_peer,
+                "chain_valid": best_chain_valid,
+            }
         else:
-            return {"message": "Sync failed: Remote chain violates local consensus rules (check difficulty)."}
+            return {"message": "Sync failed: Consensus rules violated", "valid": False}
 
-    return {"message": "Local chain is authoritative", "chain_length": current_length}
+    # Auto-healing: if local invalid but no better peer, at least admit it
+    if not is_local_valid:
+        return {
+            "message": "Local chain is corrupted and no valid peer found",
+            "valid": False,
+            "needs_manual_intervention": True,
+        }
 
+    return {
+        "message": "Local chain is authoritative",
+        "chain_length": current_length,
+        "valid": is_local_valid,
+    }
+    
 @router.post("/debug/reset")
 async def reset_chain():
     bc = get_blockchain()

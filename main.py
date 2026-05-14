@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from api.routes import router
+from api.demo_routes import router as demo_router
 from core.instance import get_blockchain
 from storage.sqlite import SQLiteStorage
 from network.discovery import p2p_discovery_loop
@@ -59,7 +60,7 @@ storage = SQLiteStorage(db_path)
 get_blockchain(storage)
 
 app.include_router(router)
-
+app.include_router(demo_router)
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(PORT), reload=True)
