@@ -4,51 +4,40 @@
 
 ## Key Features
 
-* 
-**Proof-of-Work (PoW) Consensus:** Implements Nakamoto Consensus rules with dynamic difficulty retargeting to maintain consistent block generation times.
+* **Proof-of-Work (PoW) Consensus:** Implements Nakamoto Consensus rules with dynamic difficulty retargeting to maintain consistent block generation times.
 
 
-* 
-**Cryptographic Wallets:** Provides built-in wallet generation utilizing ECDSA (SECP256K1) and SHA-256 for secure transaction signing and verification.
+* **Cryptographic Wallets:** Provides built-in wallet generation utilizing ECDSA (SECP256K1) and SHA-256 for secure transaction signing and verification.
 
 
-* 
-**Decentralized P2P Network:** Features an automated background discovery loop to find peers, heal network splits, and gossip transactions across active nodes.
+* **Decentralized P2P Network:** Features an automated background discovery loop to find peers, heal network splits, and gossip transactions across active nodes.
 
 
-* 
-**Real-Time Subscriptions:** Integrates WebSockets to broadcast live network updates, newly mined blocks, and mempool changes directly to connected clients.
+* **Real-Time Subscriptions:** Integrates WebSockets to broadcast live network updates, newly mined blocks, and mempool changes directly to connected clients.
 
 
-* 
-**Persistent Storage:** Utilizes a robust SQLite storage backend to persist the blockchain ledger, meta-states, and registered nodes.
+* **Persistent Storage:** Utilizes a robust SQLite storage backend to persist the blockchain ledger, meta-states, and registered nodes.
 
 
-* 
-**Educational Demo Sandbox:** Includes an isolated, session-based interactive playground (`/demo`) that operates independently from the real SQLite database and P2P network. This allows users to safely simulate forks, tamper with blocks, and visualize broken consensus chains.
+* **Educational Demo Sandbox:** Includes an isolated, session-based interactive playground (`/demo`) that operates independently from the real SQLite database and P2P network. This allows users to safely simulate forks, tamper with blocks, and visualize broken consensus chains.
 
 
 
 ## Technology Stack
 
-* 
-**Framework:** FastAPI and Uvicorn 
+* **Framework:** FastAPI and Uvicorn 
 
 
-* 
-**Language:** Python 
+* **Language:** Python 
 
 
-* 
-**Networking:** HTTPX (asynchronous REST) and WebSockets 
+*  **Networking:** HTTPX (asynchronous REST) and WebSockets 
 
 
-* 
-**Cryptography:** `cryptography` package (ECDSA, SECP256K1) and `hashlib` (SHA-256) 
+* **Cryptography:** `cryptography` package (ECDSA, SECP256K1) and `hashlib` (SHA-256) 
 
 
-* 
-**Database:** SQLite 
+* **Database:** SQLite 
 
 
 
@@ -95,59 +84,46 @@ NovaChain provides a comprehensive suite of REST endpoints. Once the server is r
 
 ### Core Endpoints
 
-* 
-`GET /chain`: Returns the full blockchain ledger and validation status.
+* `GET /chain`: Returns the full blockchain ledger and validation status.
 
 
-* 
-`GET /network/status`: Provides diagnostics on network health, peer synchronization status, and authoritative chain validation.
+* `GET /network/status`: Provides diagnostics on network health, peer synchronization status, and authoritative chain validation.
 
 
-* 
-`POST /mine`: Commences mining operations for pending transactions.
+* `POST /mine`: Commences mining operations for pending transactions.
 
 
-* 
-`POST /transactions/new`: Submits a newly signed transaction to the mempool.
+* `POST /transactions/new`: Submits a newly signed transaction to the mempool.
 
 
-* 
-`POST /nodes/register`: Manually registers new peer nodes.
+* `POST /nodes/register`: Manually registers new peer nodes.
 
 
 
 ### Demo Endpoints (Session Isolated)
 
-* 
-`POST /demo/session/create`: Spawns a fresh sandbox cloned from the real blockchain.
+* `POST /demo/session/create`: Spawns a fresh sandbox cloned from the real blockchain.
 
 
-* 
-`POST /demo/session/{session_id}/tamper`: Intentionally corrupts a block's data to demonstrate broken chain links.
+* `POST /demo/session/{session_id}/tamper`: Intentionally corrupts a block's data to demonstrate broken chain links.
 
 
-* 
-`POST /demo/session/{session_id}/fork`: Simulates a blockchain fork at a specified block index.
+* `POST /demo/session/{session_id}/fork`: Simulates a blockchain fork at a specified block index.
 
 
 
 ## Project Structure
 
-* 
-`api/`: Contains FastAPI routes (`routes.py`), Pydantic request models (`models.py`), and the educational sandbox endpoints (`demo_routes.py`).
+* `api/`: Contains FastAPI routes (`routes.py`), Pydantic request models (`models.py`), and the educational sandbox endpoints (`demo_routes.py`).
 
 
-* 
-`core/`: Houses the fundamental blockchain logic, including `Blockchain`, `Block`, `ConsensusEngine`, and the isolated `DemoBlockchain`.
+* `core/`: Houses the fundamental blockchain logic, including `Blockchain`, `Block`, `ConsensusEngine`, and the isolated `DemoBlockchain`.
 
 
-* 
-`crypto/`: Provides cryptographic utilities, including `MerkleTree` construction and `Wallet` ECDSA logic.
+* `crypto/`: Provides cryptographic utilities, including `MerkleTree` construction and `Wallet` ECDSA logic.
 
 
-* 
-`network/`: Manages the peer-to-peer gossip protocol (`p2p.py`), automated peer discovery (`discovery.py`), and real-time event broadcasting (`websocket.py`).
+* `network/`: Manages the peer-to-peer gossip protocol (`p2p.py`), automated peer discovery (`discovery.py`), and real-time event broadcasting (`websocket.py`).
 
 
-* 
-`storage/`: Defines the persistence layer via the base abstraction (`base.py`) and the concrete `SQLiteStorage` implementation (`sqlite.py`).
+* `storage/`: Defines the persistence layer via the base abstraction (`base.py`) and the concrete `SQLiteStorage` implementation (`sqlite.py`).
